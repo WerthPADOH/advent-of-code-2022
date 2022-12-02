@@ -1,0 +1,9 @@
+# Advent of Code 2022
+
+Solving the puzzles of https://adventofcode.com/2022
+
+The goal for me is to use a variety of languages/software to solve the problems.
+Ideally, one for each day.
+
+For all puzzles, the code assumes the puzzle input file is saved as
+"dayXX.txt", where "XX" is the day number.
