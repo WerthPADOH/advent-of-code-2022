@@ -134,12 +134,6 @@ class MonkeyGame:
     >>> m = [Monkey.from_lines(bunch) for bunch in monkey_specs]
     >>> mg = MonkeyGame(m)
     >>> mg.progress_round()
-    >>> mg.monkeys[0].items
-    [20, 23, 27, 26]
-    >>> mg.monkeys[1].items
-    [2080, 25, 167, 207, 401, 1046]
-    >>> mg.monkeys[2].items, mg.monkeys[3].items
-    ([], [])
     >>> for _ in range(19): mg.progress_round()
     >>> mg.inspections
     [101, 95, 7, 105]
@@ -152,26 +146,29 @@ class MonkeyGame:
     2713310158
     """
     def __init__(self, monkeys: List[Monkey], calm_factor: int=3):
-        self.monkeys = monkeys
-        self.inspections = [0] * len(self.monkeys)
+        self.monkeys = list(monkeys)
+        self._n_monkeys = len(self.monkeys)
+        self._items = []
+        self._owners = []
+        for ii, monk in enumerate(self.monkeys):
+            self._items.extend(monk.items)
+            self._owners.extend([ii] * len(monk.items))
+        self.inspections = [0] * self._n_monkeys
         self.calm_factor = int(calm_factor)
 
-    def progress_round(self):
-        for nn in range(len(self.monkeys)):
-            monk = self.monkeys[nn]
-            items = monk.items.copy()
-            monk.items.clear()
-            for it in items:
-                self.inspections[nn] += 1
-                it = monk.operation(it)
-                if self.calm_factor != 1:
-                    it = it // self.calm_factor
-                recipient = monk.test(it)
-                try:
-                    self.monkeys[recipient].items.append(it)
-                except IndexError:
-                    print(f'Thrower: {nn}, Catcher: {recipient}, Item: {it}, Monkey count: {len(self.monkeys)}')
-                    raise
+    def progress_round(self, n_rounds: int=1):
+        for _ in range(n_rounds):
+            for nn in range(self._n_monkeys):
+                monk = self.monkeys[nn]
+                for ii, (owner, val) in enumerate(zip(self._owners, self._items)):
+                    if owner == nn:
+                        self.inspections[nn] += 1
+                        val = monk.operation(val)
+                        if self.calm_factor != 1:
+                            val = val // self.calm_factor
+                        recipient = monk.test(val)
+                        self._items[ii] = val
+                        self._owners[ii] = recipient
 
     def monkey_business(self):
         most_active = list(sorted(self.inspections))[-2:]
