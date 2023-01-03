@@ -155,8 +155,26 @@ shortest_path <- function(map, max_steps = length(map)) {
   ]
   final_paths
 }
+
+
+shortest_to_nadir <- function(map) {
+  a_spots <- which(map %in% c("a", "S"))
+  end_coords <- which(map == "E", arr.ind = TRUE)
+  x_dist <- abs(end_coords[2] - col(map)[a_spots])
+  y_dist <- abs(end_coords[1] - row(map)[a_spots])
+  total_dist <- x_dist + y_dist
+  a_spots <- a_spots[order(total_dist)]
+  best <- data.table(n = length(map) + 1)
+  for (spot in a_spots) {
+    new_map <- map
+    new_map[map == "S"] <- "a"
+    new_map[spot] <- "S"
+    path_to_spot <- shortest_path(new_map, max_steps = best[["n"]][1] - 1)
+    if (nrow(path_to_spot) > 0 && path_to_spot[["n"]][1] < best[["n"]][1]) {
+      best <- path_to_spot
     }
   }
+  return(best)
 }
 
 
@@ -172,7 +190,15 @@ example_path <- shortest_path(example_map)
 print(example_path[["n"]][1])
 stopifnot(example_path[["n"]][1] == 31)
 
+example_nadir <- shortest_to_nadir(example_map)
+print(example_nadir[["n"]][1])
+stopifnot(example_nadir[["n"]][1] == 29)
+
 # Part 1
 letter_map <- parse_map(readLines("day12.txt"))
 path1 <- shortest_path(letter_map)
 print(path1[["n"]][1])
+
+# Part 2
+path2 <- shortest_to_nadir(letter_map)
+print(path2[["n"]][1])
