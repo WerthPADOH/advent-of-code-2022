@@ -21,6 +21,21 @@ def make_worry_test(divisor: int, if_true: int, if_false: int) -> FunctionType:
     return worry_test
 
 
+def make_operator(token1: str, token2: str, operator: FunctionType) -> FunctionType:
+    if token1 == 'old' and token2 == 'old':
+        def operation(old):
+            return operator(old, old)
+    elif token1 == 'old' and token2 != 'old':
+        t2_val = int(token2)
+        def operation(old):
+            return operator(old, t2_val)
+    elif token1 != 'old' and token2 == 'old':
+        t1_val = int(token1)
+        def operation(old):
+            return operator(t1_val, old)
+    return operation
+
+
 class Monkey:
     def __init__(
         self,
@@ -29,8 +44,12 @@ class Monkey:
         test: FunctionType=None,
     ):
         self.items = [] if items is None else list(items)
-        self.operation = operation
+        if operation is not None:
+            self.operation = operation
         self.test = test
+
+    def operation(self, old: int) -> int:
+        return old
 
     @classmethod
     def from_lines(self, lines):
@@ -65,10 +84,7 @@ class Monkey:
                 expression = line.rpartition('= ')[-1]
                 token1, op_token, token2 = expression.split(' ')
                 op = op_map[op_token]
-                monkey.operation = lambda old: op(
-                    old if token1 == 'old' else int(token1),
-                    old if token2 == 'old' else int(token2)
-                )
+                monkey.operation = make_operator(token1, token2, op)
             elif line.startswith('Test'):
                 div = int(line.rpartition(' ')[-1])
             elif line.startswith('If true:'):
