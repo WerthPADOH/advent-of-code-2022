@@ -38,20 +38,52 @@ sure_no_beacon <- function(sensor_data, y) {
 }
 
 
-find_unsensed <- function(sensor_data, min_coord, max_coord) {
-  sensor_data <- copy(sensor_data)
-  grid_length <- max_coord - min_coord + 1
-  hidden_x <- rep(seq(min_coord, max_coord), each = grid_length)
-  hidden_y <- rep(seq(min_coord, max_coord), grid_length)
-  x_dist <- outer(hidden_x, sensor_data[["sensor_x"]], "-")
-  y_dist <- outer(hidden_y, sensor_data[["sensor_y"]], "-")
-  total_dist <- matrix(abs(x_dist) + abs(y_dist), nrow = nrow(x_dist))
-  reaches <- matrix(
-    sensor_data[["reach"]], nrow = nrow(total_dist), ncol = ncol(total_dist),
-    byrow = TRUE
+bordering_squares <- function(x, y, reach) {
+  top_left <- data.table(
+    x = seq(x - reach - 1, x),
+    y = seq(y, y - reach - 1, by = -1)
   )
-  sensed <- rowSums(total_dist <= reaches)
-  cbind(x = hidden_x[!sensed], y = hidden_y[!sensed])
+  bottom_right <- data.table(
+    x = seq(x + reach + 1, x, by = -1),
+    y = seq(y, y + reach + 1, by = 1)
+  )
+  bottom_left <- data.table(
+    x = seq(x - reach, x - 1),
+    y = seq(y + 1, y + reach)
+  )
+  top_right <- data.table(
+    x = seq(x + 1, x + reach),
+    y = seq(y - reach, y - 1)
+  )
+  unique(rbind(top_left, bottom_right, bottom_left, top_right))
+}
+
+
+# If only a single square isn't in range of a sensor, that means each adjacent
+# square is at the furthest reach of a sensor. So we just need to look at all
+# the "border adjacent" squares and filter out the ones within reach of any
+# sensor.
+find_unsensed <- function(sensor_data, min_coord, max_coord) {
+  candidates <- data.table(x = integer(0), y = integer(0))
+  indexes <- seq_len(nrow(sensor_data))
+  for (ii in indexes) {
+    border <- sensor_data[
+      ii,
+      bordering_squares(sensor_x, sensor_y, reach)
+    ][
+      between(x, min_coord, max_coord) &
+        between(y, min_coord, max_coord)
+    ]
+    for (jj in setdiff(indexes, ii)) {
+      border[, ":="(
+        x_dist = abs(x - sensor_data[["sensor_x"]][jj]),
+        y_dist = abs(y - sensor_data[["sensor_y"]][jj])
+      )]
+      border <- border[x_dist + y_dist > sensor_data[["reach"]][jj]]
+    }
+    candidates <- unique(rbind(candidates, border[, list(x, y)]))
+  }
+  candidates
 }
 
 
@@ -88,11 +120,5 @@ print(length(not_beacon_2m))
 
 # Part 2
 # Break into pieces
-breaks <- seq(0, 4000000, length.out = 1000)
-results <- cbind(x = integer(0), y = integer(0))
-for (ii in seq_along(breaks[-1])) {
-  break_min <- floor(breaks[ii])
-  break_max <- ceiling(breaks[ii + 1])
-  results <- rbind(results, find_unsensed(reports, break_min, break_max))
-}
-results
+true_beacon <- find_unsensed(reports, 0, 4000000)
+print(formatC(4000000 * true_beacon[["x"]] + true_beacon[["y"]], format = "f"))
