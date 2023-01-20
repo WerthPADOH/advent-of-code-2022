@@ -51,9 +51,9 @@ def parse_network(stream) -> Dict[str, Valve]:
 
 class ReversePath:
     def __init__(self) -> None:
-        self.actions = deque([])
+        self.actions: deque[str] = deque([])
         self.released = 0
-        self.opened_valves = set()
+        self.opened_valves: set[str] = set()
 
     def copy(self):
         new_vp = ReversePath()
