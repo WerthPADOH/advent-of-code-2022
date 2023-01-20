@@ -89,6 +89,42 @@ class ReversePath:
     def __str__(self) -> str:
         return ' -> '.join(self.actions)
 
+    def ideal_released(self, network: Dict[str, Valve], total_time: int) -> int:
+        """
+        >>> v1 = Valve('A', 3, ['B', 'C'])
+        >>> v2 = Valve('B', 5, ['A'])
+        >>> v3 = Valve('C', 7, ['A'])
+        >>> nw = {'A': v1, 'B': v2, 'C': v3}
+        >>> p1 = ReversePath(); p1.move(v1)
+        >>> p1.ideal_released(nw, 5)
+        26
+        >>> p2 = ReversePath(); p2.move_and_open(v1)
+        >>> p2.ideal_released(nw, 5)
+        21
+        >>> p3 = ReversePath(); p3.move_and_open(v3)
+        >>> p3.ideal_released(nw, 5)
+        15
+        >>> p4 = ReversePath(); p4.move(v3)
+        >>> p4.ideal_released(nw, 5)
+        26
+        """
+        act_n = len(self.actions)
+        time_left = total_time - act_n
+        max_open = time_left // 2
+        odd_time = time_left % 2 == 1
+        flows_left = [
+            valve.flow for name, valve in network.items()
+            if name not in self.opened_valves
+        ]
+        flows_left.sort()
+        ideal_total = 0
+        for ii, flow in enumerate(flows_left[-max_open:]):
+            time_open = act_n + 2 * ii
+            if odd_time:
+                time_open += 1
+            ideal_total += flow * time_open
+        return self.released + ideal_total
+
 
 def add_new_best_paths(
     old_paths: Iterable[ReversePath],
@@ -125,6 +161,15 @@ def add_new_best_paths(
         if champ is None or np.released > champ.released:
             best[key] = np
     return list(best.values())
+
+
+def cut_impossible_best(
+    paths: Iterable[ReversePath],
+    network: Dict[str, Valve],
+    total_time: int,
+) -> List[ReversePath]:
+    most = max(pp.released for pp in paths)
+    return [pp for pp in paths if pp.ideal_released(network, total_time) > most]
 
 
 def path_max_release(network: Dict[str, Valve], time: int=30) -> ReversePath:
@@ -181,6 +226,7 @@ def path_max_release(network: Dict[str, Valve], time: int=30) -> ReversePath:
                 walk_open.move_and_open(to_valve)
                 added_tracks.append(walk_open)
         backtracks = deque(add_new_best_paths(backtracks, added_tracks))
+        backtracks = deque(cut_impossible_best(backtracks, network, time))
     return backtracks[0]
 
 
