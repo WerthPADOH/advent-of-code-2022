@@ -1,9 +1,8 @@
 """https://adventofcode.com/2022/day/16"""
 # I'm doing this with my work laptop, which only has Python 3.7, so no graphlib
 import re
-from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, Set
 
 
 @dataclass
@@ -49,130 +48,62 @@ def parse_network(stream) -> Dict[str, Valve]:
     return out
 
 
-class ReversePath:
-    def __init__(self) -> None:
-        self.actions: deque[str] = deque([])
-        self.released = 0
-        self.opened_valves: set[str] = set()
-
-    def copy(self):
-        new_vp = ReversePath()
-        new_vp.actions = self.actions.copy()
-        new_vp.released = self.released
-        new_vp.opened_valves = self.opened_valves.copy()
-        return new_vp
-
-    def move(self, valve: Valve):
-        self.actions.appendleft(valve.name)
-
-    def move_and_open(self, valve: Valve):
-        """
-        >>> rp = ReversePath()
-        >>> v = Valve('X', 7, [])
-        >>> rp.move_and_open(v)
-        >>> rp.released
-        0
-        >>> v2 = Valve('Y', 13, [])
-        >>> rp.move_and_open(v2)
-        >>> rp.released
-        26
-        """
-        flowing_time = len(self.actions)
-        self.actions.appendleft('open')
-        self.actions.appendleft(valve.name)
-        self.opened_valves.add(valve.name)
-        self.released += valve.flow * flowing_time
-
-    def current_location(self) -> str:
-        return self.actions[0]
-
-    def __str__(self) -> str:
-        return ' -> '.join(self.actions)
-
-    def ideal_released(self, network: Dict[str, Valve], total_time: int) -> int:
-        """
-        >>> v1 = Valve('A', 3, ['B', 'C'])
-        >>> v2 = Valve('B', 5, ['A'])
-        >>> v3 = Valve('C', 7, ['A'])
-        >>> nw = {'A': v1, 'B': v2, 'C': v3}
-        >>> p1 = ReversePath(); p1.move(v1)
-        >>> p1.ideal_released(nw, 5)
-        26
-        >>> p2 = ReversePath(); p2.move_and_open(v1)
-        >>> p2.ideal_released(nw, 5)
-        21
-        >>> p3 = ReversePath(); p3.move_and_open(v3)
-        >>> p3.ideal_released(nw, 5)
-        15
-        >>> p4 = ReversePath(); p4.move(v3)
-        >>> p4.ideal_released(nw, 5)
-        26
-        """
-        act_n = len(self.actions)
-        time_left = total_time - act_n
-        max_open = time_left // 2
-        odd_time = time_left % 2 == 1
-        flows_left = [
-            valve.flow for name, valve in network.items()
-            if name not in self.opened_valves
-        ]
-        flows_left.sort()
-        ideal_total = 0
-        for ii, flow in enumerate(flows_left[-max_open:]):
-            time_open = act_n + 2 * ii
-            if odd_time:
-                time_open += 1
-            ideal_total += flow * time_open
-        return self.released + ideal_total
-
-
-def add_new_best_paths(
-    old_paths: Iterable[ReversePath],
-    new_paths: Iterable[ReversePath],
-) -> List[ReversePath]:
+class Path:
     """
-    >>> older = [ReversePath(), ReversePath()]
-    >>> older[0].actions = ['BB', 'open', 'CC', 'open', 'DD']
-    >>> older[0].released = (13 * 3) + (2 * 1)
-    >>> older[1].actions = ['DD', 'open', 'CC', 'open', 'EE']
-    >>> older[1].released = (20 * 3) + (2 * 1)
-    >>> newer = [ReversePath(), ReversePath(), ReversePath()]
-    >>> newer[0].actions = ['BB', 'open', 'CC', 'DD', 'open']
-    >>> newer[0].released = (13 * 3) + (20 * 0)
-    >>> newer[1].actions = ['DD', 'open', 'EE', 'open', 'FF']
-    >>> newer[1].released = (20 * 3) + (3 * 1)
-    >>> newer[2].actions = ['II', 'JJ', 'open', 'II', 'AA']
-    >>> newer[2].released = 21 * 2
-    >>> # Keep old BB-branch, replace DD-branch, add II-branch
-    >>> res = add_new_best_paths(older, newer)
-    >>> len(res) == 3
-    True
-    >>> print([r for r in res if r.current_location() == 'BB'][0])
-    BB -> open -> CC -> open -> DD
-    >>> print([r for r in res if r.current_location() == 'DD'][0])
-    DD -> open -> EE -> open -> FF
-    >>> print([r for r in res if r.current_location() == 'II'][0])
-    II -> JJ -> open -> II -> AA
+    >>> p = Path(['a', 'b', 'c'])
+    >>> p.latest()
+    'c'
+    >>> p2 = p.open_last()
+    >>> p2.latest()
+    'c'
     """
-    best = {(op.current_location(), len(op.actions)): op for op in old_paths}
-    for np in new_paths:
-        key = (np.current_location(), len(np.actions))
-        champ = best.get(key)
-        if champ is None or np.released > champ.released:
-            best[key] = np
-    return list(best.values())
+    def __init__(self, actions: Iterable) -> None:
+        self.actions = tuple(actions)
+        self.opened = set()
+
+    def move_to(self, destination: str):
+        new_path = Path(self.actions + (destination, ))
+        new_path.opened = self.opened.copy()
+        return new_path
+
+    def open_last(self):
+        new_path = Path(self.actions + ('open', ))
+        new_path.opened = self.opened.copy()
+        new_path.opened.add(self.actions[-1])
+        return new_path
+
+    def latest(self) -> str:
+        if self.actions[-1] == 'open':
+            return self.actions[-2]
+        else:
+            return self.actions[-1]
+
+    def loop_valves(self) -> Set[str]:
+        loopers = set()
+        for action in reversed(self.actions):
+            if action == 'open':
+                break
+            loopers.add(action)
+        return loopers
+
+    def released(self, network: Dict[str, Valve]) -> int:
+        total = 0
+        for ii, act in enumerate(self.actions):
+            if act == 'open':
+                time_left = len(self.actions) - ii - 1
+                opened_valve = self.actions[ii - 1]
+                flow = network[opened_valve].flow
+                total += time_left * flow
+        return total
+
+    def __len__(self) -> int:
+        return len(self.actions)
+
+    def __repr__(self) -> str:
+        return 'Path((' + ', '.join(repr(act) for act in self.actions) + '))'
 
 
-def cut_impossible_best(
-    paths: Iterable[ReversePath],
-    network: Dict[str, Valve],
-    total_time: int,
-) -> List[ReversePath]:
-    most = max(pp.released for pp in paths)
-    return [pp for pp in paths if pp.ideal_released(network, total_time) > most]
-
-
-def path_max_release(network: Dict[str, Valve], time: int=30) -> ReversePath:
+def all_paths(traveled: Path, network: Dict[str, Valve], time: int):
     """
     >>> text = [
     ...     'Valve AA has flow rate=0; tunnels lead to valves DD, II, BB',
@@ -187,49 +118,76 @@ def path_max_release(network: Dict[str, Valve], time: int=30) -> ReversePath:
     ...     'Valve JJ has flow rate=21; tunnel leads to valve II',
     ... ]
     >>> nw = parse_network(text)
-    >>> p = path_max_release(nw, time=5)
+    >>> for p in sorted(x.actions for x in all_paths(('AA', ), nw, 3)): print(p)
+    ('AA', 'BB', 'CC')
+    ('AA', 'DD', 'CC')
+    ('AA', 'DD', 'EE')
+    ('AA', 'II', 'JJ')
+    """
+    if not isinstance(traveled, Path):
+        traveled = Path(traveled)
+    if len(traveled) == time:
+        yield traveled
+        return
+    else:
+        latest = traveled.latest()
+        # Avoid going in a loop without opening any valves
+        for con in network[latest].connections - traveled.loop_valves():
+            new_path = traveled.move_to(con)
+            yield from all_paths(new_path, network, time)
+        # Don't bother to open valves in the last step when there's no flow time
+        # And don't bother to open valves with 0 flow
+        time_to_flow = time - len(traveled) > 1
+        positive_flow = network[latest].flow > 0
+        if time_to_flow and positive_flow and latest not in traveled.opened:
+            opening_path = traveled.open_last()
+            for con in network[latest].connections:
+                new_path = opening_path.move_to(con)
+                yield from all_paths(new_path, network, time)
+
+
+def most_released(network: Dict[str, Valve], time: int, start: str='AA') -> int:
+    """
+    >>> text = [
+    ...     'Valve AA has flow rate=0; tunnels lead to valves DD, II, BB',
+    ...     'Valve BB has flow rate=13; tunnels lead to valves CC, AA',
+    ...     'Valve CC has flow rate=2; tunnels lead to valves DD, BB',
+    ...     'Valve DD has flow rate=20; tunnels lead to valves CC, AA, EE',
+    ...     'Valve EE has flow rate=3; tunnels lead to valves FF, DD',
+    ...     'Valve FF has flow rate=0; tunnels lead to valves EE, GG',
+    ...     'Valve GG has flow rate=0; tunnels lead to valves FF, HH',
+    ...     'Valve HH has flow rate=22; tunnel leads to valve GG',
+    ...     'Valve II has flow rate=0; tunnels lead to valves AA, JJ',
+    ...     'Valve JJ has flow rate=21; tunnel leads to valve II',
+    ... ]
+    >>> nw = parse_network(text)
+    >>> p = most_released(nw, time=5)
     >>> list(p.actions)[:5]
     ['AA', 'DD', 'open', 'EE', 'open']
-    >>> p.released
+    >>> p.released(nw)
     63
     >>> nw = parse_network(text)
-    >>> p = path_max_release(nw)
-    >>> p.released
+    >>> p = most_released(nw, time=30)
+    >>> p.released(nw)
     1651
     """
-    # Working backwards
-    time = time + 1 # Account for minute 0 at AA
-    backtracks = deque()
-    for valve in network.values():
-        tail = ReversePath()
-        tail.move(valve)
-        backtracks.append(tail)
-    while len(backtracks) > 1:
-        path = backtracks.pop()
-        time_taken = len(path.actions)
-        current_valve = network[path.current_location()]
-        if time_taken > time or (time_taken == time and current_valve.name != 'AA'):
-            continue
-        if time_taken == time:
-            backtracks.appendleft(path)
-            continue
-        added_tracks = []
-        for con_name in current_valve.connections:
-            to_valve = network[con_name]
-            walk_only = path.copy()
-            walk_only.move(to_valve)
-            added_tracks.append(walk_only)
-            unopened = con_name not in path.opened_valves
-            has_flow = to_valve.flow > 0
-            if unopened and has_flow and time - len(path.actions) >= 2:
-                walk_open = path.copy()
-                walk_open.move_and_open(to_valve)
-                added_tracks.append(walk_open)
-        backtracks = deque(add_new_best_paths(backtracks, added_tracks))
-        backtracks = deque(cut_impossible_best(backtracks, network, time))
-    return backtracks[0]
+    base_path = Path([start])
+    best_path = base_path
+    best_released = best_path.released(network)
+    for path in all_paths(base_path, network, time + 1):
+        released = path.released(network)
+        if released > best_released:
+            best_path = path
+            best_released = released
+    return best_path
 
 
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+    with open('day16.txt') as infile:
+        network = parse_network(infile.readlines())
+
+    # Part 1
+    top_path = most_released(network, time=30, start='AA')
