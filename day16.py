@@ -2,7 +2,7 @@
 # I'm doing this with my work laptop, which only has Python 3.7, so no graphlib
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterable, Set
+from typing import Dict, Iterable, List
 
 
 @dataclass
@@ -15,95 +15,17 @@ class Valve:
         return hash((type(self), self.name, self.flow, self.connections))
 
 
-def parse_network(stream) -> Dict[str, Valve]:
-    """
-    >>> text = [
-    ...     'Valve AA has flow rate=0; tunnels lead to valves DD, II, BB',
-    ...     'Valve HH has flow rate=22; tunnel leads to valve GG'
-    ... ]
-    >>> nw = parse_network(text)
-    >>> nw['AA'].name, nw['AA'].flow
-    ('AA', 0)
-    >>> nw['AA'].connections == {'DD', 'BB', 'II'}
-    True
-    >>> nw['HH'].name, nw['HH'].flow
-    ('HH', 22)
-    >>> nw['HH'].connections == {'GG'}
-    True
-    """
-    pattern = re.compile(
-        r'Valve (?P<name>[A-Z]+) has flow '
-        r'rate=(?P<flow>\d+); '
-        r'tunnel(s)? lead(s)? to valve(s)? (?P<cons>([A-Z]+, )*[A-Z]+)'
-    )
-    out = dict()
-    for line in stream:
-        line = line.strip()
-        m = pattern.match(line)
-        if m:
-            name = m.group('name')
-            flow = int(m.group('flow'))
-            cons = frozenset(m.group('cons').split(', '))
-            out[name] = Valve(name, flow, cons)
-    return out
-
-
+@dataclass
 class Path:
-    """
-    >>> p = Path(['a', 'b', 'c'])
-    >>> p.latest()
-    'c'
-    >>> p2 = p.open_last()
-    >>> p2.latest()
-    'c'
-    """
-    def __init__(self, actions: Iterable) -> None:
-        self.actions = tuple(actions)
-        self.opened = set()
+    steps: List[str]
+    released: int=0
+    duration: int=0
 
-    def move_to(self, destination: str):
-        new_path = Path(self.actions + (destination, ))
-        new_path.opened = self.opened.copy()
-        return new_path
-
-    def open_last(self):
-        new_path = Path(self.actions + ('open', ))
-        new_path.opened = self.opened.copy()
-        new_path.opened.add(self.actions[-1])
-        return new_path
-
-    def latest(self) -> str:
-        if self.actions[-1] == 'open':
-            return self.actions[-2]
-        else:
-            return self.actions[-1]
-
-    def loop_valves(self) -> Set[str]:
-        loopers = set()
-        for action in reversed(self.actions):
-            if action == 'open':
-                break
-            loopers.add(action)
-        return loopers
-
-    def released(self, network: Dict[str, Valve]) -> int:
-        total = 0
-        for ii, act in enumerate(self.actions):
-            if act == 'open':
-                time_left = len(self.actions) - ii - 1
-                opened_valve = self.actions[ii - 1]
-                flow = network[opened_valve].flow
-                total += time_left * flow
-        return total
-
-    def __len__(self) -> int:
-        return len(self.actions)
-
-    def __repr__(self) -> str:
-        return 'Path((' + ', '.join(repr(act) for act in self.actions) + '))'
+    def copy(self):
+        return Path(self.steps.copy(), self.released, self.duration)
 
 
-def all_paths(traveled: Path, network: Dict[str, Valve], time: int):
+class TunnelNetwork:
     """
     >>> text = [
     ...     'Valve AA has flow rate=0; tunnels lead to valves DD, II, BB',
@@ -117,69 +39,94 @@ def all_paths(traveled: Path, network: Dict[str, Valve], time: int):
     ...     'Valve II has flow rate=0; tunnels lead to valves AA, JJ',
     ...     'Valve JJ has flow rate=21; tunnel leads to valve II',
     ... ]
-    >>> nw = parse_network(text)
-    >>> for p in sorted(x.actions for x in all_paths(('AA', ), nw, 3)): print(p)
-    ('AA', 'BB', 'CC')
-    ('AA', 'DD', 'CC')
-    ('AA', 'DD', 'EE')
-    ('AA', 'II', 'JJ')
-    """
-    if not isinstance(traveled, Path):
-        traveled = Path(traveled)
-    if len(traveled) == time:
-        yield traveled
-        return
-    else:
-        latest = traveled.latest()
-        # Avoid going in a loop without opening any valves
-        for con in network[latest].connections - traveled.loop_valves():
-            new_path = traveled.move_to(con)
-            yield from all_paths(new_path, network, time)
-        # Don't bother to open valves in the last step when there's no flow time
-        # And don't bother to open valves with 0 flow
-        time_to_flow = time - len(traveled) > 1
-        positive_flow = network[latest].flow > 0
-        if time_to_flow and positive_flow and latest not in traveled.opened:
-            opening_path = traveled.open_last()
-            for con in network[latest].connections:
-                new_path = opening_path.move_to(con)
-                yield from all_paths(new_path, network, time)
-
-
-def most_released(network: Dict[str, Valve], time: int, start: str='AA') -> int:
-    """
-    >>> text = [
-    ...     'Valve AA has flow rate=0; tunnels lead to valves DD, II, BB',
-    ...     'Valve BB has flow rate=13; tunnels lead to valves CC, AA',
-    ...     'Valve CC has flow rate=2; tunnels lead to valves DD, BB',
-    ...     'Valve DD has flow rate=20; tunnels lead to valves CC, AA, EE',
-    ...     'Valve EE has flow rate=3; tunnels lead to valves FF, DD',
-    ...     'Valve FF has flow rate=0; tunnels lead to valves EE, GG',
-    ...     'Valve GG has flow rate=0; tunnels lead to valves FF, HH',
-    ...     'Valve HH has flow rate=22; tunnel leads to valve GG',
-    ...     'Valve II has flow rate=0; tunnels lead to valves AA, JJ',
-    ...     'Valve JJ has flow rate=21; tunnel leads to valve II',
-    ... ]
-    >>> nw = parse_network(text)
-    >>> p = most_released(nw, time=5)
-    >>> list(p.actions)[:5]
-    ['AA', 'DD', 'open', 'EE', 'open']
-    >>> p.released(nw)
-    63
-    >>> nw = parse_network(text)
-    >>> p = most_released(nw, time=30)
-    >>> p.released(nw)
+    >>> nw = TunnelNetwork.parse(text)
+    >>> nw.valves['AA'].name, nw.valves['AA'].flow
+    ('AA', 0)
+    >>> nw.valves['AA'].connections == {'DD', 'BB', 'II'}
+    True
+    >>> nw.valves['HH'].name, nw.valves['HH'].flow
+    ('HH', 22)
+    >>> nw.valves['HH'].connections == {'GG'}
+    True
+    >>> nw.distances[frozenset(('AA', 'BB'))]
+    1
+    >>> nw.distances[frozenset(('AA', 'EE'))]
+    2
+    >>> nw.distances[frozenset(('HH', 'JJ'))]
+    7
+    >>> nw.flow_valves == {'BB', 'CC', 'DD', 'EE', 'HH', 'JJ'}
+    True
+    >>> nw.max_release(30)
     1651
     """
-    base_path = Path([start])
-    best_path = base_path
-    best_released = best_path.released(network)
-    for path in all_paths(base_path, network, time + 1):
-        released = path.released(network)
-        if released > best_released:
-            best_path = path
-            best_released = released
-    return best_path
+    def __init__(self) -> None:
+        self.valves: Dict[str, Valve] = dict()
+        self.flow_valves: frozenset[str] = frozenset()
+        self.distances: Dict[frozenset, int] = dict()
+
+    @classmethod
+    def parse(self, stream: Iterable[str]):
+        tn = TunnelNetwork()
+        pattern = re.compile(
+            r'Valve (?P<name>[A-Z]+) has flow '
+            r'rate=(?P<flow>\d+); '
+            r'tunnel(s)? lead(s)? to valve(s)? (?P<cons>([A-Z]+, )*[A-Z]+)'
+        )
+        flowing = set()
+        for line in stream:
+            line = line.strip()
+            m = pattern.match(line)
+            if m:
+                name = m.group('name')
+                flow = int(m.group('flow'))
+                cons = frozenset(m.group('cons').split(', '))
+                tn.valves[name] = Valve(name, flow, cons)
+                if flow > 0:
+                    flowing.add(name)
+        tn.flow_valves = frozenset(flowing)
+        for start in tn.valves.values():
+            current_round = start.connections
+            visited = set()
+            dist = 0
+            while current_round:
+                dist += 1
+                next_round = set()
+                for end in current_round:
+                    visited.add(end)
+                    pair = frozenset((start.name, end))
+                    if pair not in tn.distances:
+                        tn.distances[pair] = dist
+                    next_round.update(
+                        next_con for next_con in tn.valves[end].connections
+                        if next_con not in visited
+                    )
+                current_round = next_round
+        return tn
+
+    def _recursive_flow_path(self, path: Path, max_time: int) -> Iterable[Path]:
+        options = self.flow_valves.difference(path.steps)
+        if len(options) == 0:
+            yield path
+        for opt in options:
+            dist = self.distances[frozenset((path.steps[-1], opt))]
+            time_to_open = dist + 1
+            if path.duration + time_to_open >= max_time:
+                yield path
+            else:
+                next_path = path.copy()
+                next_path.steps.append(opt)
+                next_path.duration += time_to_open
+                flow = self.valves[opt].flow
+                next_path.released += flow * (max_time - next_path.duration)
+                yield from self._recursive_flow_path(next_path, max_time)
+
+    def max_release(self, time: int, start: str='AA') -> int:
+        # Only looking at the order of valve releases in paths
+        best_path = Path([])
+        for path in self._recursive_flow_path(Path([start]), max_time=time):
+            if path.released > best_path.released:
+                best_path = path
+        return best_path.released
 
 
 if __name__ == '__main__':
@@ -187,7 +134,7 @@ if __name__ == '__main__':
     doctest.testmod()
 
     with open('day16.txt') as infile:
-        network = parse_network(infile.readlines())
+        network = TunnelNetwork.parse(infile.readlines())
 
     # Part 1
-    top_path = most_released(network, time=30, start='AA')
+    print(network.max_release(30))
