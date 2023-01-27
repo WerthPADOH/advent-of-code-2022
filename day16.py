@@ -58,6 +58,8 @@ class TunnelNetwork:
     True
     >>> nw.max_release(30)
     1651
+    >>> nw.max_release_team(26)
+    1707
     """
     def __init__(self) -> None:
         self.valves: Dict[str, Valve] = dict()
@@ -127,6 +129,41 @@ class TunnelNetwork:
             if path.released > best_path.released:
                 best_path = path
         return best_path.released
+
+    def _recursive_flow_path_team(self, paths: List[Path], max_time: int) -> Iterable[List[Path]]:
+        options = set(self.flow_valves)
+        for path in paths:
+            options.difference_update(path.steps)
+        if len(options) == 0:
+            yield paths
+        for opt in options:
+            terminal = True
+            for ii, path in enumerate(paths):
+                dist = self.distances[frozenset((path.steps[-1], opt))]
+                time_to_open = dist + 1
+                if path.duration + time_to_open >= max_time:
+                    continue
+                else:
+                    terminal = False
+                    next_path = path.copy()
+                    next_path.steps.append(opt)
+                    next_path.duration += time_to_open
+                    flow = self.valves[opt].flow
+                    next_path.released += flow * (max_time - next_path.duration)
+                    next_path_set = paths.copy()
+                    next_path_set[ii] = next_path
+                    yield from self._recursive_flow_path_team(next_path_set, max_time)
+            if terminal:
+                yield paths
+
+    def max_release_team(self, time: int, n_actors: int=2, start: str='AA') -> int:
+        best_released = 0
+        start_paths = [Path([start]) for _ in range(n_actors)]
+        for path_set in self._recursive_flow_path_team(start_paths, max_time=time):
+            released = sum(path.released for path in path_set)
+            if released > best_released:
+                best_released = released
+        return best_released
 
 
 if __name__ == '__main__':
