@@ -1,24 +1,9 @@
 """https://adventofcode.com/2022/day/11"""
 
+import functools
 import operator
-from collections import defaultdict
-from dataclasses import dataclass
 from typing import List
 from types import FunctionType
-
-
-def make_worry_test(divisor: int, if_true: int, if_false: int) -> FunctionType:
-    """
-    >>> f = make_worry_test(4, 101, 102)
-    >>> [f(x) for x in range(10)]
-    [101, 102, 102, 102, 101, 102, 102, 102, 101, 102]
-    """
-    def worry_test(worry: int) -> int:
-        if (worry % divisor) == 0:
-            return if_true
-        else:
-            return if_false
-    return worry_test
 
 
 def make_operator(token1: str, token2: str, operator: FunctionType) -> FunctionType:
@@ -39,14 +24,17 @@ def make_operator(token1: str, token2: str, operator: FunctionType) -> FunctionT
 class Monkey:
     def __init__(
         self,
-        items: List=None,
-        operation: FunctionType=None,
-        test: FunctionType=None,
+        items: List,
+        operation: FunctionType,
+        test_div: int,
+        test_true_dest: int,
+        test_false_dest: int,
     ):
-        self.items = [] if items is None else list(items)
-        if operation is not None:
-            self.operation = operation
-        self.test = test
+        self.items = list(items)
+        self.operation = operation
+        self.test_div = test_div
+        self.test_true_dest = test_true_dest
+        self.test_false_dest = test_false_dest
 
     def operation(self, old: int) -> int:
         return old
@@ -71,7 +59,6 @@ class Monkey:
         (2, 0)
         """
         op_map = {'+': operator.add, '*': operator.mul}
-        monkey = Monkey()
         div = None
         if_t = None
         if_f = None
@@ -79,20 +66,28 @@ class Monkey:
             line = line.strip()
             if line.startswith('Starting items:'):
                 item_list = line.rpartition(': ')[-1]
-                monkey.items = [int(value) for value in item_list.split(',')]
+                items = [int(value) for value in item_list.split(',')]
             elif line.startswith('Operation:'):
                 expression = line.rpartition('= ')[-1]
                 token1, op_token, token2 = expression.split(' ')
                 op = op_map[op_token]
-                monkey.operation = make_operator(token1, token2, op)
+                operation = make_operator(token1, token2, op)
             elif line.startswith('Test'):
                 div = int(line.rpartition(' ')[-1])
             elif line.startswith('If true:'):
                 if_t = int(line.rpartition(' ')[-1])
             elif line.startswith('If false:'):
                 if_f = int(line.rpartition(' ')[-1])
-        monkey.test = make_worry_test(div, if_t, if_f)
-        return monkey
+        return Monkey(
+            items=items, operation=operation,
+            test_div=div, test_true_dest=if_t, test_false_dest=if_f
+        )
+
+    def test(self, value) -> int:
+        if (value % self.test_div) == 0:
+            return self.test_true_dest
+        else:
+            return self.test_false_dest
 
 
 class MonkeyGame:
@@ -132,16 +127,20 @@ class MonkeyGame:
     ...    ],
     ... ]
     >>> m = [Monkey.from_lines(bunch) for bunch in monkey_specs]
-    >>> mg = MonkeyGame(m)
-    >>> mg.progress_round()
-    >>> for _ in range(19): mg.progress_round()
+    >>> mg = MonkeyGame(m, calm_factor=3)
+    >>> mg.progress_round(n_rounds=20)
     >>> mg.inspections
     [101, 95, 7, 105]
     >>> mg.monkey_business()
     10605
-    >>> m = [Monkey.from_lines(bunch) for bunch in monkey_specs]
+    >>> mg = MonkeyGame(m, calm_factor=3)
+    >>> mg.item_driven_rounds(n_rounds=20)
+    >>> mg.inspections
+    [101, 95, 7, 105]
+    >>> mg.monkey_business()
+    10605
     >>> mg = MonkeyGame(m, calm_factor=1)
-    >>> for _ in range(10000): mg.progress_round()
+    >>> mg.item_driven_rounds(n_rounds=10000)
     >>> mg.monkey_business()
     2713310158
     """
@@ -157,6 +156,10 @@ class MonkeyGame:
         self.calm_factor = int(calm_factor)
 
     def progress_round(self, n_rounds: int=1):
+        big_div = functools.reduce(
+            operator.mul,
+            (monk.test_div for monk in self.monkeys)
+        )
         for _ in range(n_rounds):
             for nn in range(self._n_monkeys):
                 monk = self.monkeys[nn]
@@ -166,9 +169,31 @@ class MonkeyGame:
                         val = monk.operation(val)
                         if self.calm_factor != 1:
                             val = val // self.calm_factor
+                        else:
+                            val = val % big_div
                         recipient = monk.test(val)
                         self._items[ii] = val
                         self._owners[ii] = recipient
+
+    def item_driven_rounds(self, n_rounds: int):
+        big_div = functools.reduce(
+            operator.mul,
+            (monk.test_div for monk in self.monkeys)
+        )
+        for item, owner in zip(self._items, self._owners):
+            elapsed = 0
+            while elapsed < n_rounds:
+                monk = self.monkeys[owner]
+                self.inspections[owner] += 1
+                item = monk.operation(item)
+                if self.calm_factor != 1:
+                    item = item // self.calm_factor
+                else:
+                    item = item % big_div
+                recipient = monk.test(item)
+                if recipient < owner:
+                    elapsed += 1
+                owner = recipient
 
     def monkey_business(self):
         most_active = list(sorted(self.inspections))[-2:]
@@ -190,7 +215,19 @@ if __name__ == '__main__':
             del line_feed[:7]
         else:
             del line_feed[0]
-    game = MonkeyGame(monkeys)
-    for _ in range(20):
-        game.progress_round()
+    game = MonkeyGame(monkeys, calm_factor=3)
+    game.progress_round(n_rounds=20)
+    print(game.monkey_business())
+
+    # Part 2
+    line_feed = lines.copy()
+    monkeys = []
+    while line_feed:
+        if line_feed[0].startswith('Monkey'):
+            monkeys.append(Monkey.from_lines(line_feed[1:7]))
+            del line_feed[:7]
+        else:
+            del line_feed[0]
+    game = MonkeyGame(monkeys, calm_factor=1)
+    game.item_driven_rounds(n_rounds=10000)
     print(game.monkey_business())
