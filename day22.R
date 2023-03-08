@@ -175,3 +175,14 @@ path1 <- blaze_trail(
   commands = puzzle_input[["commands"]]
 )
 print(password(path1[.N]))
+
+
+# Part 2
+cube_map <- puzzle_input[["map"]]
+connections <- rbind(
+  data.table(
+    x = 1, y = 51:100, facing = COMPASS[["N"]],
+    next_x = 151:200, next_y = 1, next_facing = COMPASS[["E"]]
+  ),
+  data.table()
+)
