@@ -53,7 +53,11 @@ class Valley:
 
 
 
-def fastest_path(valley: Valley) -> List[Tuple[int]]:
+def fastest_path(
+    valley: Valley,
+    start_round: int=0,
+    backwards=False,
+) -> List[Tuple[int]]:
     """
     >>> lines = [
     ...     '#.#####',
@@ -79,9 +83,13 @@ def fastest_path(valley: Valley) -> List[Tuple[int]]:
     >>> fastest_path(v)
     18
     """
-    locations = {valley.start}
+    start = valley.start
+    finish = valley.finish
+    if backwards:
+        start, finish = finish, start
+    locations = {start}
     next_locations = set()
-    round = 1
+    round = start_round + 1
     open_spaces = valley.open_at_round(round)
     while True:
         if not locations:
@@ -93,12 +101,44 @@ def fastest_path(valley: Valley) -> List[Tuple[int]]:
             open_spaces = valley.open_at_round(round)
             continue
         loc = locations.pop()
-        if loc == valley.finish:
+        if loc == finish:
             break
         possible = valley.reachable[loc] & open_spaces
         for choice in possible:
             next_locations.add(choice)
     return round - 1
+
+
+def forgot_something(valley: Valley):
+    """
+    >>> lines = [
+    ...     '#.#####',
+    ...     '#.....#',
+    ...     '#>....#',
+    ...     '#.....#',
+    ...     '#...v.#',
+    ...     '#.....#',
+    ...     '#####.#',
+    ... ]
+    >>> v = Valley(lines)
+    >>> forgot_something(v)
+    30
+    >>> lines = [
+    ...     '#.######',
+    ...     '#>>.<^<#',
+    ...     '#.<..<<#',
+    ...     '#>v.><>#',
+    ...     '#<^v^^>#',
+    ...     '######.#',
+    ... ]
+    >>> v = Valley(lines)
+    >>> forgot_something(v)
+    54
+    """
+    first_time = fastest_path(valley, start_round=0, backwards=False)
+    back_time = fastest_path(valley, start_round=first_time, backwards=True)
+    second_time = fastest_path(valley, start_round=back_time, backwards=False)
+    return second_time
 
 
 if __name__ == '__main__':
@@ -109,5 +149,7 @@ if __name__ == '__main__':
         valley = Valley(infile)
 
     # Part 1
-    path1 = fastest_path(valley)
-    print(len(path1) - 1)
+    print(fastest_path(valley))
+
+    # Part 2
+    print(forgot_something(valley))
