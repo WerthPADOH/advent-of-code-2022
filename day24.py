@@ -1,4 +1,5 @@
 """https://adventofcode.com/2022/day/24"""
+import collections
 from dataclasses import dataclass
 from typing import Dict, List, Set, Tuple
 import primes
@@ -51,6 +52,50 @@ class Valley:
         return self._open_at_round[n % len(self._open_at_round)]
 
 
+def _manhattan_distance(a, b):
+    return sum(abs(mm - nn) for mm, nn in zip(a, b))
+
+
+def quick_worm(valley: Valley) -> List[Tuple[int]]:
+    """
+    >>> lines = [
+    ...     '#.#####',
+    ...     '#.....#',
+    ...     '#>....#',
+    ...     '#.....#',
+    ...     '#...v.#',
+    ...     '#.....#',
+    ...     '#####.#',
+    ... ]
+    >>> v = Valley(lines)
+    >>> qw = quick_worm(v)
+    >>> qw[0]
+    (0, -1)
+    >>> qw[-1]
+    (4, 5)
+    """
+    path = [valley.start]
+    first_steps = valley.reachable[valley.start] & valley.open_at_round(1)
+    choices: List[Set] = [first_steps]
+    dead_ends: Dict[Set] = collections.defaultdict(set)
+    while path[-1] != valley.finish:
+        rounds = len(path) - 1
+        if not choices[-1]:
+            terminus = path.pop()
+            dead_ends[rounds].add(terminus)
+            del choices[-1]
+        else:
+            choice = choices[-1].pop()
+            path.append(choice)
+            possible = valley.reachable[choice] & valley.open_at_round(rounds + 1)
+            possible.difference_update(dead_ends[rounds + 1])
+            # Try the closest tiles to the finish first
+            choice_list = list(sorted(
+                possible,
+                key=lambda p: -_manhattan_distance(p, valley.finish)
+            ))
+            choices.append(choice_list)
+    return path
 
 
 def fastest_path(
