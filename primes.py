@@ -73,3 +73,31 @@ def factors(num: int):
     if len(fac) == 0:
         return {num: 1}
     return dict(fac)
+
+
+def lcm(*args):
+    """
+    >>> lcm(9, 12)
+    36
+    >>> lcm(12, 9)
+    36
+    >>> lcm(27, 1)
+    27
+    >>> lcm(27, 1, 0)
+    0
+    >>> lcm(54, 54, 54)
+    54
+    """
+    max_factors = dict()
+    for x in args:
+        x = int(x)
+        if x == 0:
+            return 0
+        for prime, exponent in factors(x).items():
+            current_exp = max_factors.get(prime, 0)
+            if exponent > current_exp:
+                max_factors[prime] = exponent
+    out = 1
+    for pp, ee in max_factors.items():
+        out *= pp**ee
+    return out
