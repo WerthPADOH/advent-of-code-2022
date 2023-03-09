@@ -1,6 +1,6 @@
 """https://adventofcode.com/2022/day/24"""
 from dataclasses import dataclass
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 import primes
 
 
@@ -18,6 +18,11 @@ class Valley:
         self.finish = (self.width - 1, self.height)
         self._all_ground.add(self.start)
         self._all_ground.add(self.finish)
+        self.reachable: Dict[Tuple[int], Set[Tuple[int]]] = dict()
+        for coord in self._all_ground:
+            x, y = coord
+            neighbors = {coord, (x, y + 1), (x, y - 1), (x + 1, y), (x - 1, y)}
+            self.reachable[coord] = neighbors & self._all_ground
         reset_round = primes.lcm(self.width, self.height)
         self._open_at_round = []
         for _ in range(reset_round):
@@ -45,15 +50,7 @@ class Valley:
     def open_at_round(self, n):
         return self._open_at_round[n % len(self._open_at_round)]
 
-    def reachable(self, coords: Tuple[int]) -> Set[Tuple[int]]:
-        neighbors = {
-            coords,
-            (coords[0], coords[1] + 1),
-            (coords[0], coords[1] - 1),
-            (coords[0] + 1, coords[1]),
-            (coords[0] - 1, coords[1]),
-        }
-        return neighbors & self._all_ground
+
 
 
 def fastest_path(valley: Valley) -> List[Tuple[int]]:
@@ -68,8 +65,7 @@ def fastest_path(valley: Valley) -> List[Tuple[int]]:
     ...     '#####.#',
     ... ]
     >>> v = Valley(lines)
-    >>> fp = fastest_path(v)
-    >>> len(fp) - 1
+    >>> fastest_path(v)
     10
     >>> lines = [
     ...     '#.######',
@@ -80,33 +76,29 @@ def fastest_path(valley: Valley) -> List[Tuple[int]]:
     ...     '######.#',
     ... ]
     >>> v = Valley(lines)
-    >>> fp = fastest_path(v)
-    >>> len(fp) - 1
+    >>> fastest_path(v)
     18
     """
-    paths = [(valley.start, )]
-    next_paths = []
-    winner = None
+    locations = {valley.start}
+    next_locations = set()
     round = 1
     open_spaces = valley.open_at_round(round)
-    while winner is None:
-        if not paths:
-            if not next_paths:
+    while True:
+        if not locations:
+            if not next_locations:
                 raise RuntimeError('All paths are dead ends!')
             round += 1
-            paths = next_paths
-            next_paths = []
+            locations.update(next_locations)
+            next_locations.clear()
             open_spaces = valley.open_at_round(round)
             continue
-        pp = paths.pop()
-        if pp[-1] == valley.finish:
-            winner = pp
+        loc = locations.pop()
+        if loc == valley.finish:
             break
-        possible = valley.reachable(pp[-1]) & open_spaces
+        possible = valley.reachable[loc] & open_spaces
         for choice in possible:
-            extended = pp + (choice, )
-            next_paths.append(extended)
-    return winner
+            next_locations.add(choice)
+    return round - 1
 
 
 if __name__ == '__main__':
