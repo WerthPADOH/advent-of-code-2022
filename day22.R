@@ -180,12 +180,12 @@ print(password(path1[.N]))
 
 # Part 2
 cube_sides <- list(
-  CJ(y =   1: 50, x =  51:100),
-  CJ(y =   1: 50, x = 101:150),
-  CJ(y =  51:100, x =  51:100),
-  CJ(y = 101:150, x =   1: 50),
-  CJ(y = 101:150, x =  51:100),
-  CJ(y = 151:200, x =   1: 50)
+  CJ(x =  51:100, y =   1: 50),
+  CJ(x = 101:150, y =   1: 50),
+  CJ(x =  51:100, y =  51:100),
+  CJ(x =   1: 50, y = 101:150),
+  CJ(x =  51:100, y = 101:150),
+  CJ(x =   1: 50, y = 151:200)
 )
 for (ii in seq_along(cube_sides)) {
   cube_sides[[ii]][, char := puzzle_input[["map"]][cbind(y, x)]]
