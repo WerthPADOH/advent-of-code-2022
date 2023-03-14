@@ -21,6 +21,10 @@ parse_input <- function(text_lines) {
 }
 
 
+COMPASS <- c(E = 1, S = 2, W = 3, N = 4)
+WALK_CHARS <- c(E = ">", S = "v", W = "<", N = "^")
+
+
 plot_map <- function(map, path = NULL) {
   map_dt <- data.table(
     x = as.vector(col(map)),
@@ -36,7 +40,7 @@ plot_map <- function(map, path = NULL) {
     theme_void()
   if (!is.null(path)) {
     path <- copy(path)
-    path[, y := nrow(map) - y + 1]
+    path[, ":="(y = nrow(map) - y + 1, char = WALK_CHARS[facing])]
     plotted <- plotted +
       geom_tile(data = path, fill = "steelblue") +
       geom_text(data = path, aes(label = char), color = "darkblue")
@@ -44,9 +48,6 @@ plot_map <- function(map, path = NULL) {
   plotted
 }
 
-
-COMPASS <- c(E = 1, S = 2, W = 3, N = 4)
-WALK_CHARS <- c(E = ">", S = "v", W = "<", N = "^")
 
 # R has 1-based indices, so modulo math is weird
 mod_base_1 <- function(x, modulus) {
