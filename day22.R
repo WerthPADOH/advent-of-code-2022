@@ -356,6 +356,7 @@ blaze_cube <- function(rings, commands) {
 }
 
 
+# Example for part 2
 example_sides <- list(
   CJ(x = 9:12, y = 1:4),
   CJ(x = 1:4, y = 5:8),
@@ -369,16 +370,16 @@ for (ii in seq_along(example_sides)) {
 }
 
 ex_x_rings <- make_rings(
-  side1 = example_sides[[1]], dir1 = COMPASS[["N"]],
-  side2 = example_sides[[2]], dir2 = COMPASS[["S"]],
-  side3 = example_sides[[5]], dir3 = COMPASS[["N"]],
-  side4 = example_sides[[4]], dir4 = COMPASS[["N"]]
-)
-ex_y_rings <- make_rings(
   side1 = example_sides[[1]], dir1 = COMPASS[["E"]],
   side2 = example_sides[[6]], dir2 = COMPASS[["W"]],
   side3 = example_sides[[5]], dir3 = COMPASS[["W"]],
   side4 = example_sides[[3]], dir4 = COMPASS[["N"]]
+)
+ex_y_rings <- make_rings(
+  side1 = example_sides[[1]], dir1 = COMPASS[["N"]],
+  side2 = example_sides[[2]], dir2 = COMPASS[["S"]],
+  side3 = example_sides[[5]], dir3 = COMPASS[["N"]],
+  side4 = example_sides[[4]], dir4 = COMPASS[["N"]]
 )
 ex_z_rings <- make_rings(
   side1 = example_sides[[2]], dir1 = COMPASS[["E"]],
