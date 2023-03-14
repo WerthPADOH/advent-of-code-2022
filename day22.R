@@ -234,23 +234,27 @@ make_rings <- function(
   setindexv(sides, c("side", "x", "y"))
   setorderv(sides, c("side", "x", "y"))
   side_length <- max(side1[["x"]]) - min(side1[["x"]]) + 1
-  index_ring <- sides[, matrix(seq_len(.N), nrow = side_length)]
+  side_indices <- sides[
+    ,
+    list(mat = list(matrix(.I, nrow = side_length))),
+    keyby = side
+  ][[
+    "mat"
+  ]]
   dirs <- c(dir1, dir2, dir3, dir4)
-  compass_degrees <- c(E = 0, S = 90, W = 180, N = 270)
+  compass_degrees <- c(E = 0, S = 270, W = 180, N = 90)
   for (ii in seq_along(dirs)) {
-    side_cols <- seq_len(side_length) + side_length * (ii - 1)
-    index_ring[, side_cols] <- rotate_matrix(
-      index_ring[, side_cols],
-      compass_degrees[dirs[[ii]]]
-    )
+    degrees <- compass_degrees[dirs[[ii]]]
+    side_indices[[ii]] <- rotate_matrix(side_indices[[ii]], degrees)
   }
+  index_ring <- do.call(cbind, side_indices)
   ring_dt <- sides[
     as.vector(index_ring)
   ][
     ,
     ":="(
-      ring = rep(seq_len(side_length), 4 * side_length),
-      ordering = rep(seq_len(4 * side_length), each = side_length)
+      ring = as.vector(row(index_ring)),
+      ordering = as.vector(col(index_ring))
     )
   ]
   reversed <- copy(ring_dt)
@@ -286,6 +290,20 @@ z_rings[, ring := ring + max(y_rings[["ring"]])]
 cube_rings <- rbind(x_rings, y_rings, z_rings)
 
 
+walk_ring <- function(rings, position, distance) {
+  ring_info <- rings[position, on = c("x", "y", "facing")]
+  ring <- rings[ring == ring_info[["ring"]]]
+  indices <- mod_base_1(ring_info[["ordering"]] + seq_len(distance), nrow(ring))
+  ring_path <- ring[list(ordering = indices), on = "ordering"]
+  wall_loc <- which(ring_path[["char"]] == "#")
+  if (length(wall_loc) > 0) {
+    first_wall <- min(wall_loc)
+    ring_path <- ring_path[seq_len(first_wall - 1)]
+  }
+  ring_path
+}
+
+
 blaze_cube <- function(rings, commands) {
   n <- nrow(rings)
   ring_length <- max(rings[["ordering"]])
@@ -306,20 +324,11 @@ blaze_cube <- function(rings, commands) {
     } else if (identical(cmd, "L")) {
       walked[position_ii, facing := mod_base_1(facing - 1, 4)]
     } else {
-      ring_info <- rings[walked[position_ii], on = c("x", "y", "facing")]
-      path_key <- ring_info[, list(
-        ring,
-        ordering = mod_base_1(ordering + seq_len(cmd), ring_length)
-      )]
-      path <- rings[
-        path_key, on = c("ring", "ordering"),
-        list(x, y, facing)
-      ]
-      wall_loc <- which(path[["char"]] == "#")
-      if (length(wall_loc) > 0) {
-        first_wall <- min(wall_loc)
-        path <- path[seq_len(first_wall - 1)]
-      }
+      path <- walk_ring(
+        rings = rings,
+        position = walked[position_ii],
+        distance = cmd
+      )
       steps_taken <- nrow(path)
       if (steps_taken > 0) {
         if (position_ii + steps_taken > nrow(walked)) {
@@ -333,7 +342,12 @@ blaze_cube <- function(rings, commands) {
           rm(more_blanks)
         }
         added_rows <- position_ii + seq_len(steps_taken)
-        set(walked, i = added_rows, j = c("x", "y", "facing"), value = path)
+        set(
+          walked,
+          i = added_rows,
+          j = c("x", "y", "facing"),
+          value = path[, list(x, y, facing)]
+        )
       }
       position_ii <- position_ii + steps_taken
     }
